@@ -1,0 +1,34 @@
+// Modelo de datos — Fase 1 de la arquitectura de CTA.
+// La instancia de PostgreSQL vive en el VPS; no se usan contenedores.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Registro de cada clic en un CTA. Es la base de la trazabilidad: el
+/// interactionId acompaña al usuario hasta el cierre del expediente.
+model CtaEvent {
+  id              String   @id @default(uuid()) @db.Uuid
+  interactionId   String   @map("interaction_id") @db.Uuid
+  ctaId           String   @map("cta_id") @db.VarChar(100)
+  ctaLabel        String   @map("cta_label") @db.VarChar(150)
+  ctaCode         String?  @map("cta_code") @db.VarChar(60)
+  location        String   @db.VarChar(50)
+  destination     String   @db.VarChar(255)
+  sourcePage      String?  @map("source_page") @db.VarChar(255)
+  campaign        String?  @db.VarChar(100)
+  sessionId       String?  @map("session_id") @db.Uuid
+  anonymousUserId String?  @map("anonymous_user_id") @db.Uuid
+  occurredAt      DateTime @map("occurred_at") @db.Timestamptz(6)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([ctaId])
+  @@index([sessionId])
+  @@index([occurredAt])
+  @@map("cta_events")
+}

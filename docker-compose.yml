@@ -1,0 +1,23 @@
+# Despliegue en el VPS compartido. Convenciones de GUIA_VPS.md:
+# - un puerto del host por app (verificar libre con `ss -ltn` antes de levantar);
+# - credenciales solo en .env, nunca aquí;
+# - red postgresql_default para alcanzar postgres_db por DNS interno.
+services:
+  raicescare_api:
+    build: .
+    container_name: raicescare_api
+    restart: always
+    ports:
+      - "${API_HOST_PORT:-8221}:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=${DATABASE_URL}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    networks:
+      - default
+      - postgresql_default
+
+networks:
+  postgresql_default:
+    external: true
