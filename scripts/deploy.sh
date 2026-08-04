@@ -83,6 +83,9 @@ echo "  -- migraciones"
 sleep 5
 docker compose exec -T ${CONTENEDOR} npx prisma migrate deploy 2>&1 | tail -3
 
+echo "  -- catálogo de CTA"
+docker compose exec -T ${CONTENEDOR} npx tsx prisma/seed.ts 2>&1 | tail -2
+
 echo "  -- verificar"
 docker ps --filter name=${CONTENEDOR} --format "     contenedor: up {{.RunningFor}}"
 curl -sf http://localhost:${PUERTO}/api/v1/health >/dev/null && echo "     health local OK"

@@ -1,15 +1,17 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";
-import { CtaEventsModule } from "./modules/cta-events/cta-events.module";
 import { HealthModule } from "./modules/health/health.module";
+import { InteractionsModule } from "./modules/interactions/interactions.module";
+import { RequestsModule } from "./modules/requests/requests.module";
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     HealthModule,
-    CtaEventsModule,
+    InteractionsModule,
+    RequestsModule,
   ],
 })
 export class AppModule {}

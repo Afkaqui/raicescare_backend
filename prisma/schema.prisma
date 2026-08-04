@@ -1,5 +1,5 @@
-// Modelo de datos — Fase 1 de la arquitectura de CTA.
-// La instancia de PostgreSQL vive en el VPS; no se usan contenedores.
+// Modelo transversal — Fase 2 de la arquitectura.
+// La instancia de PostgreSQL vive en el VPS; no se usan contenedores para la BD.
 
 generator client {
   provider = "prisma-client-js"
@@ -10,25 +10,275 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Registro de cada clic en un CTA. Es la base de la trazabilidad: el
-/// interactionId acompaña al usuario hasta el cierre del expediente.
-model CtaEvent {
-  id              String   @id @default(uuid()) @db.Uuid
-  interactionId   String   @map("interaction_id") @db.Uuid
-  ctaId           String   @map("cta_id") @db.VarChar(100)
-  ctaLabel        String   @map("cta_label") @db.VarChar(150)
-  ctaCode         String?  @map("cta_code") @db.VarChar(60)
-  location        String   @db.VarChar(50)
-  destination     String   @db.VarChar(255)
-  sourcePage      String?  @map("source_page") @db.VarChar(255)
-  campaign        String?  @db.VarChar(100)
-  sessionId       String?  @map("session_id") @db.Uuid
-  anonymousUserId String?  @map("anonymous_user_id") @db.Uuid
-  occurredAt      DateTime @map("occurred_at") @db.Timestamptz(6)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+// ---------------------------------------------------------------- interacciones
 
-  @@index([ctaId])
+/// Catálogo de los 12 CTA funcionales. Espeja el registry del frontend.
+model CtaDefinition {
+  code              String   @id @db.VarChar(80)
+  label             String   @db.VarChar(180)
+  destination       String   @db.VarChar(300)
+  processType       String   @map("process_type") @db.VarChar(60)
+  analyticsCategory String   @map("analytics_category") @db.VarChar(40)
+  isActive          Boolean  @default(true) @map("is_active")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  interacciones CtaInteraction[]
+
+  @@map("cta_definitions")
+}
+
+/// Una fila por interactionId. Acompaña al visitante desde el clic hasta el
+/// expediente: su estado avanza, no se duplica.
+model CtaInteraction {
+  id                String  @id @default(uuid()) @db.Uuid
+  interactionId     String  @unique @map("interaction_id") @db.Uuid
+  ctaCode           String  @map("cta_code") @db.VarChar(80)
+  visibleLabel      String  @map("visible_label") @db.VarChar(180)
+  sourcePage        String  @map("source_page")
+  sourceSection     String  @map("source_section") @db.VarChar(120)
+  destination       String
+  processType       String  @map("process_type") @db.VarChar(60)
+  analyticsCategory String  @map("analytics_category") @db.VarChar(40)
+  sessionId         String? @map("session_id") @db.Uuid
+  anonymousUserId   String? @map("anonymous_user_id") @db.Uuid
+
+  // Se completan progresivamente, a medida que el visitante avanza.
+  userType           String? @map("user_type") @db.VarChar(60)
+  personId           String? @map("person_id") @db.Uuid
+  organizationId     String? @map("organization_id") @db.Uuid
+  categoryOfInterest String? @map("category_of_interest") @db.VarChar(120)
+  programCode        String? @map("program_code") @db.VarChar(80)
+  campaignId         String? @map("campaign_id") @db.Uuid
+  initiativeId       String? @map("initiative_id") @db.Uuid
+  projectId          String? @map("project_id") @db.Uuid
+  opportunityId      String? @map("opportunity_id") @db.Uuid
+  requestType        String? @map("request_type") @db.VarChar(80)
+  requestId          String? @map("request_id") @db.Uuid
+
+  status     String   @default("clicked") @db.VarChar(40)
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  definicion CtaDefinition      @relation(fields: [ctaCode], references: [code])
+  eventos    InteractionEvent[]
+  solicitud  InstitutionalRequest?
+
+  @@index([ctaCode])
   @@index([sessionId])
+  @@index([status])
   @@index([occurredAt])
-  @@map("cta_events")
+  @@map("cta_interactions")
+}
+
+/// Bitácora inmutable de cada interacción.
+model InteractionEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  interactionId String   @map("interaction_id") @db.Uuid
+  eventName     String   @map("event_name") @db.VarChar(120)
+  eventCategory String   @map("event_category") @db.VarChar(60)
+  payload       Json     @default("{}")
+  occurredAt    DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  interaccion CtaInteraction @relation(fields: [interactionId], references: [interactionId], onDelete: Cascade)
+
+  @@index([interactionId])
+  @@index([eventName])
+  @@map("interaction_events")
+}
+
+// -------------------------------------------------------------------- personas
+
+model Person {
+  id                      String   @id @default(uuid()) @db.Uuid
+  fullName                String   @map("full_name") @db.VarChar(180)
+  email                   String?  @db.VarChar(180)
+  phone                   String?  @db.VarChar(40)
+  country                 String?  @db.VarChar(100)
+  documentType            String?  @map("document_type") @db.VarChar(30)
+  /// Cifrado en la aplicación: nunca se guarda el número en claro.
+  documentNumberEncrypted String?  @map("document_number_encrypted")
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  solicitudes    InstitutionalRequest[]
+  consentimientos Consent[]
+
+  @@index([email])
+  @@map("persons")
+}
+
+model Organization {
+  id                 String   @id @default(uuid()) @db.Uuid
+  organizationType   String?  @map("organization_type") @db.VarChar(80)
+  legalName          String   @map("legal_name") @db.VarChar(250)
+  registrationNumber String?  @map("registration_number") @db.VarChar(100)
+  country            String?  @db.VarChar(100)
+  website            String?
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  solicitudes InstitutionalRequest[]
+
+  @@index([legalName])
+  @@map("organizations")
+}
+
+// ----------------------------------------------------------------- expediente
+
+/// Cabecera común de los cuatro formularios maestros. Cada proceso puede tener
+/// su tabla especializada, pero todos comparten este expediente.
+model InstitutionalRequest {
+  id                     String    @id @default(uuid()) @db.Uuid
+  trackingCode           String    @unique @map("tracking_code") @db.VarChar(50)
+  requestType            String    @map("request_type") @db.VarChar(80)
+  interactionId          String?   @unique @map("interaction_id") @db.Uuid
+  applicantPersonId      String?   @map("applicant_person_id") @db.Uuid
+  applicantOrganizationId String?  @map("applicant_organization_id") @db.Uuid
+  category               String?   @db.VarChar(120)
+  source                 String?   @db.VarChar(120)
+  status                 String    @default("received") @db.VarChar(60)
+  assignedOwnerId        String?   @map("assigned_owner_id") @db.Uuid
+  responseDeadline       DateTime? @map("response_deadline") @db.Timestamptz(6)
+  submittedAt            DateTime  @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  closedAt               DateTime? @map("closed_at") @db.Timestamptz(6)
+
+  interaccion   CtaInteraction?        @relation(fields: [interactionId], references: [interactionId])
+  persona       Person?                @relation(fields: [applicantPersonId], references: [id])
+  organizacion  Organization?          @relation(fields: [applicantOrganizationId], references: [id])
+  historial     RequestStatusHistory[]
+  asignaciones  RequestAssignment[]
+  documentos    RequestDocument[]
+  comunicaciones RequestCommunication[]
+  consentimientos Consent[]
+  resultado     RequestOutcome?
+
+  @@index([requestType])
+  @@index([status])
+  @@index([submittedAt])
+  @@map("institutional_requests")
+}
+
+/// Secuencia transaccional de los códigos de seguimiento: RC-AP-2026-000001.
+model RequestSequence {
+  prefix   String   @db.VarChar(10)
+  year     Int
+  lastValue Int     @default(0) @map("last_value")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@id([prefix, year])
+  @@map("request_sequences")
+}
+
+model Consent {
+  id            String    @id @default(uuid()) @db.Uuid
+  personId      String?   @map("person_id") @db.Uuid
+  requestId     String?   @map("request_id") @db.Uuid
+  consentType   String    @map("consent_type") @db.VarChar(80)
+  policyVersion String    @map("policy_version") @db.VarChar(30)
+  accepted      Boolean
+  acceptedAt    DateTime? @map("accepted_at") @db.Timestamptz(6)
+  /// Solo hash: no se conserva la IP ni el user agent en claro.
+  sourceIpHash  String?   @map("source_ip_hash")
+  userAgentHash String?   @map("user_agent_hash")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  persona   Person?               @relation(fields: [personId], references: [id])
+  solicitud InstitutionalRequest? @relation(fields: [requestId], references: [id])
+
+  @@index([requestId])
+  @@index([consentType])
+  @@map("consents")
+}
+
+model RequestDocument {
+  id               String   @id @default(uuid()) @db.Uuid
+  requestId        String   @map("request_id") @db.Uuid
+  documentType     String   @map("document_type") @db.VarChar(80)
+  fileName         String   @map("file_name") @db.VarChar(300)
+  storageKey       String   @map("storage_key")
+  mimeType         String   @map("mime_type") @db.VarChar(100)
+  fileSizeBytes    BigInt   @map("file_size_bytes")
+  checksumSha256   String   @map("checksum_sha256") @db.Char(64)
+  visibility       String   @default("internal") @db.VarChar(30)
+  validationStatus String   @default("uploaded") @map("validation_status") @db.VarChar(40)
+  uploadedBy       String?  @map("uploaded_by") @db.Uuid
+  uploadedAt       DateTime @default(now()) @map("uploaded_at") @db.Timestamptz(6)
+
+  solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("request_documents")
+}
+
+/// Nunca se actualiza un estado sin conservar el anterior.
+model RequestStatusHistory {
+  id              String   @id @default(uuid()) @db.Uuid
+  requestId       String   @map("request_id") @db.Uuid
+  previousStatus  String?  @map("previous_status") @db.VarChar(80)
+  newStatus       String   @map("new_status") @db.VarChar(80)
+  publicComment   String?  @map("public_comment")
+  internalComment String?  @map("internal_comment")
+  reasonCode      String?  @map("reason_code") @db.VarChar(100)
+  changedBy       String?  @map("changed_by") @db.Uuid
+  changedAt       DateTime @default(now()) @map("changed_at") @db.Timestamptz(6)
+
+  solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("request_status_history")
+}
+
+model RequestAssignment {
+  id               String    @id @default(uuid()) @db.Uuid
+  requestId        String    @map("request_id") @db.Uuid
+  assignedUserId   String    @map("assigned_user_id") @db.Uuid
+  assignedRole     String    @map("assigned_role") @db.VarChar(80)
+  assignmentType   String    @map("assignment_type") @db.VarChar(40)
+  responseDeadline DateTime? @map("response_deadline") @db.Timestamptz(6)
+  assignedAt       DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  completedAt      DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@index([assignedUserId])
+  @@map("request_assignments")
+}
+
+model RequestCommunication {
+  id                String    @id @default(uuid()) @db.Uuid
+  requestId         String    @map("request_id") @db.Uuid
+  communicationType String    @map("communication_type") @db.VarChar(40)
+  direction         String    @db.VarChar(20)
+  subject           String?   @db.VarChar(300)
+  messageSummary    String?   @map("message_summary")
+  recipientAddress  String?   @map("recipient_address") @db.VarChar(250)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(250)
+  status            String?   @db.VarChar(40)
+  sentBy            String?   @map("sent_by") @db.Uuid
+  sentAt            DateTime? @map("sent_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("request_communications")
+}
+
+model RequestOutcome {
+  id             String    @id @default(uuid()) @db.Uuid
+  requestId      String    @unique @map("request_id") @db.Uuid
+  outcomeCode    String    @map("outcome_code") @db.VarChar(100)
+  outcomeSummary String    @map("outcome_summary")
+  publicMessage  String?   @map("public_message")
+  internalBasis  String?   @map("internal_basis")
+  decidedBy      String?   @map("decided_by") @db.Uuid
+  decidedAt      DateTime  @map("decided_at") @db.Timestamptz(6)
+  closedAt       DateTime? @map("closed_at") @db.Timestamptz(6)
+
+  solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@map("request_outcomes")
 }
