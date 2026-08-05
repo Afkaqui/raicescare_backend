@@ -172,8 +172,15 @@ export class MercadoPagoClient {
     requestId?: string;
     dataId?: string;
   }): boolean {
-    const secreto = this.config.get<string>("MP_WEBHOOK_SECRET");
-    if (!secreto) {
+    // Cada modo del panel —prueba y producción— genera su propio secreto. Se
+    // admiten varios separados por coma para que el paso a producción no deje
+    // una ventana en la que ninguna notificación valide.
+    const secretos = (this.config.get<string>("MP_WEBHOOK_SECRET") ?? "")
+      .split(",")
+      .map((valor) => valor.trim())
+      .filter(Boolean);
+
+    if (secretos.length === 0) {
       this.logger.error("Falta MP_WEBHOOK_SECRET: no se puede validar el webhook");
       return false;
     }
@@ -198,14 +205,15 @@ export class MercadoPagoClient {
     if (entrada.requestId) manifiesto += `request-id:${entrada.requestId};`;
     manifiesto += `ts:${ts};`;
 
-    const esperada = createHmac("sha256", secreto)
-      .update(manifiesto)
-      .digest("hex");
+    const recibida = Buffer.from(v1, "utf8");
 
-    const a = Buffer.from(esperada, "utf8");
-    const b = Buffer.from(v1, "utf8");
-    if (a.length !== b.length) return false;
-
-    return timingSafeEqual(a, b);
+    return secretos.some((secreto) => {
+      const esperada = Buffer.from(
+        createHmac("sha256", secreto).update(manifiesto).digest("hex"),
+        "utf8",
+      );
+      if (esperada.length !== recibida.length) return false;
+      return timingSafeEqual(esperada, recibida);
+    });
   }
 }
