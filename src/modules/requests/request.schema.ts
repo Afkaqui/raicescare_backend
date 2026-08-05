@@ -31,10 +31,14 @@ export type EstadoGeneral = (typeof ESTADOS_GENERALES)[number];
  */
 export const TRANSICIONES: Record<EstadoGeneral, readonly EstadoGeneral[]> = {
   received: ["automatic_validation", "under_review", "closed"],
+  // Una validación automática puede concluir sin revisión humana: es el caso
+  // del aporte que la pasarela confirma, que no necesita que nadie lo apruebe.
   automatic_validation: [
     "under_review",
     "additional_information_requested",
     "not_eligible",
+    "in_process",
+    "closed",
   ],
   under_review: [
     "additional_information_requested",

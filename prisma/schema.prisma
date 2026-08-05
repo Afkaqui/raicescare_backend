@@ -156,6 +156,8 @@ model InstitutionalRequest {
   comunicaciones RequestCommunication[]
   consentimientos Consent[]
   resultado     RequestOutcome?
+  pagos         Payment[]
+  suscripcion   Subscription?
 
   @@index([requestType])
   @@index([status])
@@ -284,4 +286,82 @@ model RequestOutcome {
   solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@map("request_outcomes")
+}
+
+// ---------------------------------------------------------------------- pagos
+
+/// Un aporte único, o cada cobro individual de una suscripción. El estado
+/// autoritativo siempre se relee de MercadoPago: el webhook solo avisa que
+/// algo cambió, nunca se le cree lo que dice.
+model Payment {
+  id                String    @id @default(uuid()) @db.Uuid
+  requestId         String    @map("request_id") @db.Uuid
+  subscriptionId    String?   @map("subscription_id") @db.Uuid
+  provider          String    @default("mercadopago") @db.VarChar(40)
+  /// Identificador del pago en MercadoPago. Único: es la llave de idempotencia
+  /// frente a los reintentos del webhook.
+  providerPaymentId String?   @unique @map("provider_payment_id") @db.VarChar(80)
+  preferenceId      String?   @map("preference_id") @db.VarChar(120)
+  amount            Decimal   @db.Decimal(12, 2)
+  currency          String    @default("PEN") @db.VarChar(3)
+  status            String    @default("pending") @db.VarChar(40)
+  statusDetail      String?   @map("status_detail") @db.VarChar(120)
+  paymentTypeId     String?   @map("payment_type_id") @db.VarChar(60)
+  paymentMethodId   String?   @map("payment_method_id") @db.VarChar(60)
+  /// Correo que el aportante usó en MercadoPago; puede diferir del formulario.
+  payerEmail        String?   @map("payer_email") @db.VarChar(180)
+  approvedAt        DateTime? @map("approved_at") @db.Timestamptz(6)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  solicitud    InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  suscripcion  Subscription?        @relation(fields: [subscriptionId], references: [id])
+
+  @@index([requestId])
+  @@index([status])
+  @@map("payments")
+}
+
+/// Aporte recurrente (preapproval de MercadoPago). El expediente queda
+/// `in_process` mientras la suscripción siga viva.
+model Subscription {
+  id                    String    @id @default(uuid()) @db.Uuid
+  requestId             String    @unique @map("request_id") @db.Uuid
+  provider              String    @default("mercadopago") @db.VarChar(40)
+  providerPreapprovalId String?   @unique @map("provider_preapproval_id") @db.VarChar(80)
+  amount                Decimal   @db.Decimal(12, 2)
+  currency              String    @default("PEN") @db.VarChar(3)
+  /// Cada cuántas unidades se cobra: 1 mes, 3 meses, 1 año.
+  frequency             Int       @default(1)
+  frequencyType         String    @default("months") @map("frequency_type") @db.VarChar(20)
+  status                String    @default("pending") @db.VarChar(40)
+  payerEmail            String?   @map("payer_email") @db.VarChar(180)
+  nextPaymentDate       DateTime? @map("next_payment_date") @db.Timestamptz(6)
+  cancelledAt           DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  solicitud InstitutionalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  cobros    Payment[]
+
+  @@index([status])
+  @@map("subscriptions")
+}
+
+/// Bitácora de todo lo que llega al webhook, válido o no. Sirve para auditar y
+/// para reconstruir si alguna notificación se procesó mal.
+model PaymentEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  provider       String   @default("mercadopago") @db.VarChar(40)
+  eventType      String   @map("event_type") @db.VarChar(60)
+  resourceId     String   @map("resource_id") @db.VarChar(80)
+  signatureValid Boolean  @map("signature_valid")
+  processed      Boolean  @default(false)
+  processingNote String?  @map("processing_note")
+  payload        Json     @default("{}")
+  receivedAt     DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@index([resourceId])
+  @@index([receivedAt])
+  @@map("payment_events")
 }
