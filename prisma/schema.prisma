@@ -137,6 +137,9 @@ model InstitutionalRequest {
   applicantOrganizationId String?  @map("applicant_organization_id") @db.Uuid
   category               String?   @db.VarChar(120)
   source                 String?   @db.VarChar(120)
+  /// Respuestas específicas del proceso. La cabecera es común; el detalle de
+  /// cada formulario maestro vive aquí hasta que amerite tabla propia.
+  formData               Json?     @map("form_data")
   status                 String    @default("received") @db.VarChar(60)
   assignedOwnerId        String?   @map("assigned_owner_id") @db.Uuid
   responseDeadline       DateTime? @map("response_deadline") @db.Timestamptz(6)

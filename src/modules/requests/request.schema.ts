@@ -73,6 +73,8 @@ export const crearSolicitudSchema = z.object({
       website: z.string().url().optional(),
     })
     .optional(),
+  /// Respuestas específicas del formulario maestro correspondiente.
+  formData: z.record(z.unknown()).optional(),
   consents: z
     .array(
       z.object({
@@ -81,7 +83,18 @@ export const crearSolicitudSchema = z.object({
         accepted: z.boolean(),
       }),
     )
-    .optional(),
+    .min(1, "Se requiere al menos el consentimiento de tratamiento de datos")
+    .refine(
+      (lista) =>
+        lista.some(
+          (consentimiento) =>
+            consentimiento.consentType === "privacy" && consentimiento.accepted,
+        ),
+      {
+        message:
+          "El consentimiento de tratamiento de datos personales es obligatorio",
+      },
+    ),
 });
 
 export const transicionSchema = z.object({

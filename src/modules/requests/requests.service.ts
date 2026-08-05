@@ -81,6 +81,7 @@ export class RequestsService {
           applicantOrganizationId: organizacion?.id,
           category: datos.category,
           source: datos.source,
+          formData: (datos.formData ?? undefined) as never,
           status: "received",
         },
       });
