@@ -41,7 +41,6 @@ export class PaymentsService {
       titulo: "Aporte a RaícesCare",
       monto: datos.amount,
       moneda: datos.currency,
-      email: datos.email,
       urlBase: this.urlBase,
     });
 

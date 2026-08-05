@@ -93,7 +93,6 @@ export class MercadoPagoClient {
     titulo: string;
     monto: number;
     moneda: string;
-    email?: string;
     urlBase: string;
   }): Promise<Preferencia> {
     return this.pedir<Preferencia>("/checkout/preferences", {
@@ -112,7 +111,10 @@ export class MercadoPagoClient {
         // La llave de toda la trazabilidad: el pago vuelve identificado con el
         // código del expediente que lo originó.
         external_reference: datos.trackingCode,
-        payer: datos.email ? { email: datos.email } : undefined,
+        // A propósito no se envía `payer`: fijar el correo obliga a pagar con
+        // esa cuenta exacta, y el que alguien escribe en nuestro formulario no
+        // tiene por qué ser el de su MercadoPago. El correo real del pagador
+        // llega después en la notificación y ese es el que se guarda.
         back_urls: {
           success: `${datos.urlBase}/aportes/gracias?codigo=${datos.trackingCode}`,
           pending: `${datos.urlBase}/aportes/gracias?codigo=${datos.trackingCode}`,
