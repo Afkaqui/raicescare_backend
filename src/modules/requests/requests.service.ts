@@ -38,6 +38,11 @@ export class RequestsService {
     const prefijo = TIPOS_SOLICITUD[datos.requestType];
     const anio = new Date().getFullYear();
 
+    // La trazabilidad no puede bloquear el proceso: si la interacción no llegó
+    // a registrarse (API caída al hacer clic, bloqueador de anuncios, sesión
+    // vieja), el expediente se abre igual, solo que sin enlazar.
+    const interactionId = await this.interaccionValida(datos.interactionId);
+
     const solicitud = await this.prisma.$transaction(async (tx) => {
       const secuencia = await tx.requestSequence.upsert({
         where: { prefix_year: { prefix: prefijo, year: anio } },
@@ -76,7 +81,7 @@ export class RequestsService {
         data: {
           trackingCode,
           requestType: datos.requestType,
-          interactionId: datos.interactionId,
+          interactionId,
           applicantPersonId: persona?.id,
           applicantOrganizationId: organizacion?.id,
           category: datos.category,
@@ -115,9 +120,9 @@ export class RequestsService {
     });
 
     // Cierra el círculo de trazabilidad: el clic se volvió expediente.
-    if (datos.interactionId) {
+    if (interactionId) {
       await this.interacciones
-        .vincularSolicitud(datos.interactionId, {
+        .vincularSolicitud(interactionId, {
           requestType: datos.requestType,
           requestId: solicitud.id,
         })
@@ -215,6 +220,30 @@ export class RequestsService {
         status: actualizada.status,
       };
     });
+  }
+
+  /**
+   * Devuelve el interactionId solo si existe en la base. Un identificador
+   * huérfano rompería la clave foránea y con ella el envío del formulario.
+   */
+  private async interaccionValida(
+    interactionId?: string,
+  ): Promise<string | undefined> {
+    if (!interactionId) return undefined;
+
+    const existe = await this.prisma.ctaInteraction.findUnique({
+      where: { interactionId },
+      select: { id: true },
+    });
+
+    if (!existe) {
+      this.logger.warn(
+        `Interacción ${interactionId} no registrada: el expediente se abre sin enlazar`,
+      );
+      return undefined;
+    }
+
+    return interactionId;
   }
 
   /** Nunca se guarda la IP ni el user agent en claro. */
