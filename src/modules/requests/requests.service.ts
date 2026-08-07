@@ -223,8 +223,13 @@ export class RequestsService {
   }
 
   /**
-   * Devuelve el interactionId solo si existe en la base. Un identificador
-   * huérfano rompería la clave foránea y con ella el envío del formulario.
+   * Devuelve el interactionId solo si se puede enlazar sin romper nada: debe
+   * existir y no estar ya tomado por otro expediente.
+   *
+   * Las dos comprobaciones nacen del mismo principio: la trazabilidad no puede
+   * impedir que alguien haga un trámite. Un identificador huérfano rompería la
+   * clave foránea; uno repetido, la restricción de unicidad. En ambos casos lo
+   * que se pierde es el enlace, nunca la solicitud.
    */
   private async interaccionValida(
     interactionId?: string,
@@ -239,6 +244,21 @@ export class RequestsService {
     if (!existe) {
       this.logger.warn(
         `Interacción ${interactionId} no registrada: el expediente se abre sin enlazar`,
+      );
+      return undefined;
+    }
+
+    // Una misma sesión puede originar varios expedientes: quien reintenta un
+    // aporte rechazado, o aporta dos veces, reenvía el mismo identificador.
+    const yaTomada = await this.prisma.institutionalRequest.findUnique({
+      where: { interactionId },
+      select: { trackingCode: true },
+    });
+
+    if (yaTomada) {
+      this.logger.warn(
+        `Interacción ${interactionId} ya enlazada a ${yaTomada.trackingCode}: ` +
+          "el nuevo expediente se abre sin enlazar",
       );
       return undefined;
     }
