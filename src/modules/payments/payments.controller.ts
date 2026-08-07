@@ -11,6 +11,7 @@ import {
   Req,
 } from "@nestjs/common";
 import type { Request } from "express";
+import { LimitadorWebhook } from "./limitador-webhook";
 import { MercadoPagoClient } from "./mercadopago.client";
 import { PaymentsService } from "./payments.service";
 import { checkoutSchema, suscripcionSchema } from "./payment.schema";
@@ -20,6 +21,7 @@ export class PaymentsController {
   constructor(
     private readonly service: PaymentsService,
     private readonly mp: MercadoPagoClient,
+    private readonly limitador: LimitadorWebhook,
   ) {}
 
   /** POST /api/v1/payments/checkout — devuelve la URL de Checkout Pro. */
@@ -63,6 +65,11 @@ export class PaymentsController {
     const dataId = dataIdQuery ?? (datos?.id ? String(datos.id) : undefined);
     const tipo =
       (typeof cuerpo?.type === "string" ? cuerpo.type : undefined) ?? tipoQuery;
+
+    // Se responde 200 también al limitar: quien sondee no debe distinguir.
+    if (!this.limitador.permitido(peticion.ip ?? "desconocida")) {
+      return { recibido: true };
+    }
 
     const firmaValida = this.mp.firmaValida({
       firma: peticion.get("x-signature"),

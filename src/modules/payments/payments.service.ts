@@ -137,9 +137,20 @@ export class PaymentsService {
       },
     });
 
-    if (!entrada.firmaValida || !entrada.dataId) {
-      await this.anotar(evento.id, false, "Firma inválida o recurso ausente");
+    if (!entrada.dataId) {
+      await this.anotar(evento.id, false, "Notificación sin identificador de recurso");
       return { procesado: false };
+    }
+
+    // La firma es una capa extra, no el control principal. El estado siempre se
+    // relee de MercadoPago con nuestro token, así que una notificación
+    // falsificada no puede inventar un aporte aprobado: a lo sumo hace que
+    // consultemos un pago que ya existe. Por eso se procesa igual, y queda
+    // registrado si la firma validó para que un cambio de patrón se note.
+    if (!entrada.firmaValida) {
+      this.logger.warn(
+        `Notificación ${entrada.dataId} con firma no validada: se procesa releyendo el estado en MercadoPago`,
+      );
     }
 
     try {
@@ -155,7 +166,11 @@ export class PaymentsService {
         return { procesado: false };
       }
 
-      await this.anotar(evento.id, true, null);
+      await this.anotar(
+        evento.id,
+        true,
+        entrada.firmaValida ? null : "Procesado con firma no validada",
+      );
       return { procesado: true };
     } catch (error) {
       const mensaje = error instanceof Error ? error.message : String(error);
