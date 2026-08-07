@@ -74,7 +74,18 @@ export class PaymentsController {
       tipo,
       dataId,
       firmaValida,
-      payload: cuerpo,
+      // Se guarda con qué se validó, no solo el cuerpo: sin la cabecera de
+      // firma y la consulta original, un rechazo es indiagnosticable. La firma
+      // es un código de autenticación, no un secreto.
+      payload: {
+        cuerpo,
+        consulta: peticion.query,
+        cabeceras: {
+          "x-signature": peticion.get("x-signature") ?? null,
+          "x-request-id": peticion.get("x-request-id") ?? null,
+          "user-agent": peticion.get("user-agent") ?? null,
+        },
+      },
     });
 
     return { recibido: true };
