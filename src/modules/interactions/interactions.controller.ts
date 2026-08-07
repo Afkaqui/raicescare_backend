@@ -10,7 +10,9 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UseGuards,
 } from "@nestjs/common";
+import { TokenServicioGuard } from "../../common/token-servicio.guard";
 import { InteractionsService } from "./interactions.service";
 import {
   actualizarInteraccionSchema,
@@ -29,6 +31,10 @@ export class InteractionsController {
   /**
    * POST /api/v1/events/cta — formato heredado que usa el frontend publicado.
    * Responde 202 siempre: la analítica no debe bloquear la navegación.
+   *
+   * Único endpoint de escritura de interacciones abierto: lo llama el navegador
+   * de cada visitante, así que no puede exigir credencial. Lo peor que permite
+   * es ensuciar la analítica, nunca tocar un expediente.
    */
   @Post("events/cta")
   @HttpCode(HttpStatus.ACCEPTED)
@@ -51,6 +57,7 @@ export class InteractionsController {
   }
 
   /** POST /api/v1/interactions */
+  @UseGuards(TokenServicioGuard)
   @Post("interactions")
   @HttpCode(HttpStatus.ACCEPTED)
   async registrar(@Body() cuerpo: unknown) {
@@ -66,12 +73,14 @@ export class InteractionsController {
   }
 
   /** GET /api/v1/interactions/{interactionId} */
+  @UseGuards(TokenServicioGuard)
   @Get("interactions/:interactionId")
   consultar(@Param("interactionId", ParseUUIDPipe) interactionId: string) {
     return this.service.consultar(interactionId);
   }
 
   /** PATCH /api/v1/interactions/{interactionId} */
+  @UseGuards(TokenServicioGuard)
   @Patch("interactions/:interactionId")
   actualizar(
     @Param("interactionId", ParseUUIDPipe) interactionId: string,
@@ -85,6 +94,7 @@ export class InteractionsController {
   }
 
   /** POST /api/v1/interactions/{interactionId}/events */
+  @UseGuards(TokenServicioGuard)
   @Post("interactions/:interactionId/events")
   @HttpCode(HttpStatus.CREATED)
   registrarEvento(
@@ -99,6 +109,7 @@ export class InteractionsController {
   }
 
   /** POST /api/v1/interactions/{interactionId}/link-request */
+  @UseGuards(TokenServicioGuard)
   @Post("interactions/:interactionId/link-request")
   vincular(
     @Param("interactionId", ParseUUIDPipe) interactionId: string,

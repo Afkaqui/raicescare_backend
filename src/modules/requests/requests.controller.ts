@@ -9,7 +9,9 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  UseGuards,
 } from "@nestjs/common";
+import { TokenServicioGuard } from "../../common/token-servicio.guard";
 import type { Request } from "express";
 import { RequestsService } from "./requests.service";
 import { crearSolicitudSchema, transicionSchema } from "./request.schema";
@@ -39,7 +41,12 @@ export class RequestsController {
     return this.service.consultarPorCodigo(trackingCode);
   }
 
-  /** POST /api/v1/requests/{id}/status-transitions */
+  /**
+   * POST /api/v1/requests/{id}/status-transitions — solo back-office.
+   * Quien envía un formulario recibe el id de su expediente; sin esta guarda
+   * podría avanzarlo él mismo.
+   */
+  @UseGuards(TokenServicioGuard)
   @Post(":id/status-transitions")
   transicionar(
     @Param("id", ParseUUIDPipe) id: string,

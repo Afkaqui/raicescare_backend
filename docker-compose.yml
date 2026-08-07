@@ -17,6 +17,7 @@ services:
       - PUBLIC_SITE_URL=${PUBLIC_SITE_URL}
       - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN}
       - MP_WEBHOOK_SECRET=${MP_WEBHOOK_SECRET}
+      - ADMIN_API_TOKEN=${ADMIN_API_TOKEN}
     networks:
       - default
       - postgresql_default
