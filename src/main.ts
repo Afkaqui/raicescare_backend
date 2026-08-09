@@ -19,10 +19,13 @@ async function bootstrap() {
     .map((origen) => origen.trim())
     .filter(Boolean);
 
+  // La sesión del back-office viaja en cookie, así que hace falta permitir
+  // credenciales. Eso obliga a una lista de orígenes explícita: con
+  // credenciales, el comodín no es válido.
   app.enableCors({
     origin: origenes.length > 0 ? origenes : true,
-    methods: ["GET", "POST", "OPTIONS"],
-    credentials: false,
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    credentials: true,
   });
 
   const puerto = Number(config.get<string>("PORT") ?? 3001);

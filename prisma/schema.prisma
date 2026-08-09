@@ -365,3 +365,91 @@ model PaymentEvent {
   @@index([receivedAt])
   @@map("payment_events")
 }
+
+// ------------------------------------------------------------------- usuarios
+
+/// Cuentas del back-office. Solo dos roles: `admin` opera el trabajo diario,
+/// `superadmin` guarda lo que altera accesos, contrapartes o dinero movido.
+/// Nadie se registra solo: las cuentas las crea el superadmin.
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(180)
+  fullName     String    @map("full_name") @db.VarChar(180)
+  /// scrypt con sal por usuario. Nunca se guarda la contraseña.
+  passwordHash String?   @map("password_hash")
+  role         String    @default("admin") @db.VarChar(20)
+  status       String    @default("active") @db.VarChar(20)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  /// Intentos fallidos seguidos; frena el probado de contraseñas.
+  failedLogins Int       @default(0) @map("failed_logins")
+  lockedUntil  DateTime? @map("locked_until") @db.Timestamptz(6)
+  createdById  String?   @map("created_by_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sesiones  Session[]
+  tokens    PasswordToken[]
+  creadoPor User?  @relation("CreadorDeUsuarios", fields: [createdById], references: [id])
+  creados   User[] @relation("CreadorDeUsuarios")
+
+  @@index([status])
+  @@map("users")
+}
+
+/// Sesión con token opaco. Se guarda solo su hash: quien lea la base no puede
+/// suplantar a nadie. Se revoca al borrar la fila, que es lo que hace falta
+/// cuando el superadmin quita a un administrador.
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  ipHash     String?   @map("ip_hash")
+  userAgent  String?   @map("user_agent") @db.VarChar(300)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  usuario User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// Enlace de un solo uso para definir o recuperar la contraseña. Nunca se
+/// envía una contraseña por correo: se envía la posibilidad de elegir una.
+model PasswordToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  /// `invitation` al crear la cuenta, `recovery` al recuperarla.
+  purpose   String    @db.VarChar(20)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  usuario User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_tokens")
+}
+
+/// Bitácora de lo que hacen las cuentas: quién, qué y sobre qué. El expediente
+/// ya guarda su propio historial; esto cubre todo lo demás, sobre todo lo que
+/// solo puede el superadmin.
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorUserId  String?  @map("actor_user_id") @db.Uuid
+  action       String   @db.VarChar(80)
+  targetType   String?  @map("target_type") @db.VarChar(60)
+  targetId     String?  @map("target_id") @db.VarChar(80)
+  detail       Json     @default("{}")
+  ipHash       String?  @map("ip_hash")
+  occurredAt   DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  @@index([actorUserId])
+  @@index([action])
+  @@index([occurredAt])
+  @@map("audit_logs")
+}

@@ -11,7 +11,10 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { TokenServicioGuard } from "../../common/token-servicio.guard";
+import {
+  SesionGuard,
+  type PeticionConActor,
+} from "../auth/sesion.guard";
 import type { Request } from "express";
 import { RequestsService } from "./requests.service";
 import { crearSolicitudSchema, transicionSchema } from "./request.schema";
@@ -43,19 +46,25 @@ export class RequestsController {
 
   /**
    * POST /api/v1/requests/{id}/status-transitions — solo back-office.
-   * Quien envía un formulario recibe el id de su expediente; sin esta guarda
-   * podría avanzarlo él mismo.
+   *
+   * Exige sesión, no un token compartido: el historial del expediente debe
+   * poder decir quién decidió, no solo que alguien lo hizo. `changedBy` sale
+   * de la sesión y no del cuerpo, para que nadie firme en nombre de otro.
    */
-  @UseGuards(TokenServicioGuard)
+  @UseGuards(SesionGuard)
   @Post(":id/status-transitions")
   transicionar(
     @Param("id", ParseUUIDPipe) id: string,
     @Body() cuerpo: unknown,
+    @Req() peticion: PeticionConActor,
   ) {
     const validacion = transicionSchema.safeParse(cuerpo);
     if (!validacion.success) {
       throw new BadRequestException(validacion.error.issues);
     }
-    return this.service.transicionar(id, validacion.data);
+    return this.service.transicionar(id, {
+      ...validacion.data,
+      changedBy: peticion.actor!.id,
+    });
   }
 }
