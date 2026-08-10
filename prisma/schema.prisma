@@ -453,3 +453,66 @@ model AuditLog {
   @@index([occurredAt])
   @@map("audit_logs")
 }
+
+// ----------------------------------------------------------------- contenidos
+
+/// Campañas, iniciativas y proyectos que se publican desde el panel.
+///
+/// Se guarda el contenido, no HTML renderizado: así el sitio decide cómo se ve
+/// y nadie puede inyectar marcado desde el panel.
+model ContentItem {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// `campaign`, `initiative` o `project`.
+  kind        String    @db.VarChar(20)
+  slug        String    @db.VarChar(120)
+  title       String    @db.VarChar(200)
+  summary     String    @db.VarChar(400)
+  /// Cuerpo en párrafos de texto plano.
+  body        String
+  /// Programa al que pertenece, si aplica.
+  programCode String?   @map("program_code") @db.VarChar(80)
+  location    String?   @db.VarChar(160)
+  startsOn    DateTime? @map("starts_on") @db.Date
+  endsOn      DateTime? @map("ends_on") @db.Date
+  /// Meta de recaudación, cuando la campaña la tenga.
+  goalAmount  Decimal?  @map("goal_amount") @db.Decimal(12, 2)
+  goalCurrency String?  @map("goal_currency") @db.VarChar(3)
+  coverMediaId String?  @map("cover_media_id") @db.Uuid
+
+  /// `draft` o `published`. Despublicar es reversible; eliminar no.
+  status      String    @default("draft") @db.VarChar(20)
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdById String?   @map("created_by_id") @db.Uuid
+  updatedById String?   @map("updated_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  portada MediaAsset? @relation("PortadaDeContenido", fields: [coverMediaId], references: [id])
+
+  /// El slug se repite entre tipos distintos, pero no dentro del mismo.
+  @@unique([kind, slug])
+  @@index([status])
+  @@index([programCode])
+  @@map("content_items")
+}
+
+/// Archivo subido desde el panel. El binario vive en disco; aquí su ficha.
+model MediaAsset {
+  id            String   @id @default(uuid()) @db.Uuid
+  /// Nombre en disco: aleatorio, nunca el que traía el archivo.
+  storageKey    String   @unique @map("storage_key") @db.VarChar(120)
+  originalName  String   @map("original_name") @db.VarChar(300)
+  mimeType      String   @map("mime_type") @db.VarChar(100)
+  sizeBytes     Int      @map("size_bytes")
+  width         Int?
+  height        Int?
+  /// Texto alternativo: sin él la imagen es invisible para quien no ve.
+  altText       String?  @map("alt_text") @db.VarChar(300)
+  checksumSha256 String  @map("checksum_sha256") @db.Char(64)
+  uploadedById  String?  @map("uploaded_by_id") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  portadaDe ContentItem[] @relation("PortadaDeContenido")
+
+  @@map("media_assets")
+}

@@ -9,6 +9,8 @@ import { AuthModule } from "./modules/auth/auth.module";
 import { EmailModule } from "./modules/email/email.module";
 import { UsersModule } from "./modules/users/users.module";
 import { BackofficeModule } from "./modules/backoffice/backoffice.module";
+import { MediaModule } from "./modules/media/media.module";
+import { ContentModule } from "./modules/content/content.module";
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { BackofficeModule } from "./modules/backoffice/backoffice.module";
     AuthModule,
     UsersModule,
     BackofficeModule,
+    MediaModule,
+    ContentModule,
   ],
 })
 export class AppModule {}

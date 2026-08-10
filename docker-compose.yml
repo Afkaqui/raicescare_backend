@@ -20,6 +20,11 @@ services:
       - ADMIN_API_TOKEN=${ADMIN_API_TOKEN}
       - RESEND_API_KEY=${RESEND_API_KEY}
       - EMAIL_REMITENTE=${EMAIL_REMITENTE}
+      - ALMACEN_RUTA=/app/almacen
+    volumes:
+      # Los archivos subidos sobreviven a cada redespliegue: viven en el host,
+      # no dentro de la imagen.
+      - ./almacen:/app/almacen
     networks:
       - default
       - postgresql_default
