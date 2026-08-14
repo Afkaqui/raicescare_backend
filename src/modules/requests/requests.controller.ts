@@ -18,6 +18,7 @@ import {
 import type { Request } from "express";
 import { RequestsService } from "./requests.service";
 import { crearSolicitudSchema, transicionSchema } from "./request.schema";
+import { ipDelCliente } from "../../common/ip-cliente";
 
 @Controller("requests")
 export class RequestsController {
@@ -33,7 +34,7 @@ export class RequestsController {
     }
 
     return this.service.crear(validacion.data, {
-      ip: peticion.ip,
+      ip: ipDelCliente(peticion),
       ua: peticion.get("user-agent"),
     });
   }

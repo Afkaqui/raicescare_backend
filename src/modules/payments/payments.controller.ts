@@ -11,17 +11,18 @@ import {
   Req,
 } from "@nestjs/common";
 import type { Request } from "express";
-import { LimitadorWebhook } from "./limitador-webhook";
+import { Limitador } from "../../common/limitador";
 import { MercadoPagoClient } from "./mercadopago.client";
 import { PaymentsService } from "./payments.service";
 import { checkoutSchema, suscripcionSchema } from "./payment.schema";
+import { ipDelCliente } from "../../common/ip-cliente";
 
 @Controller("payments")
 export class PaymentsController {
   constructor(
     private readonly service: PaymentsService,
     private readonly mp: MercadoPagoClient,
-    private readonly limitador: LimitadorWebhook,
+    private readonly limitador: Limitador,
   ) {}
 
   /** POST /api/v1/payments/checkout — devuelve la URL de Checkout Pro. */
@@ -67,7 +68,7 @@ export class PaymentsController {
       (typeof cuerpo?.type === "string" ? cuerpo.type : undefined) ?? tipoQuery;
 
     // Se responde 200 también al limitar: quien sondee no debe distinguir.
-    if (!this.limitador.permitido(peticion.ip ?? "desconocida")) {
+    if (!this.limitador.permitido("webhook", ipDelCliente(peticion), 60, 60_000)) {
       return { recibido: true };
     }
 

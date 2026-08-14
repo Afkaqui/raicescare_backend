@@ -19,6 +19,7 @@ import {
 } from "../auth/sesion.guard";
 import { ContentService } from "./content.service";
 import { TIPOS_CONTENIDO, contenidoSchema } from "./content.schema";
+import { ipDelCliente } from "../../common/ip-cliente";
 
 /** Lo que consume el sitio público: solo lectura y solo lo publicado. */
 @Controller("content")
@@ -66,7 +67,7 @@ export class ContentAdminController {
   crear(@Body() cuerpo: unknown, @Req() peticion: PeticionConActor) {
     const validacion = contenidoSchema.safeParse(cuerpo);
     if (!validacion.success) throw new BadRequestException(validacion.error.issues);
-    return this.service.crear(validacion.data, peticion.actor!, peticion.ip);
+    return this.service.crear(validacion.data, peticion.actor!, ipDelCliente(peticion));
   }
 
   @Put(":id")
@@ -77,7 +78,7 @@ export class ContentAdminController {
   ) {
     const validacion = contenidoSchema.safeParse(cuerpo);
     if (!validacion.success) throw new BadRequestException(validacion.error.issues);
-    return this.service.actualizar(id, validacion.data, peticion.actor!, peticion.ip);
+    return this.service.actualizar(id, validacion.data, peticion.actor!, ipDelCliente(peticion));
   }
 
   @SoloSuperadmin()
@@ -86,6 +87,6 @@ export class ContentAdminController {
     @Param("id", ParseUUIDPipe) id: string,
     @Req() peticion: PeticionConActor,
   ) {
-    return this.service.eliminar(id, peticion.actor!, peticion.ip);
+    return this.service.eliminar(id, peticion.actor!, ipDelCliente(peticion));
   }
 }

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
 import { PrismaModule } from "./prisma/prisma.module";
+import { LimitadorModule } from "./common/limitador";
 import { HealthModule } from "./modules/health/health.module";
 import { InteractionsModule } from "./modules/interactions/interactions.module";
 import { RequestsModule } from "./modules/requests/requests.module";
@@ -16,6 +17,7 @@ import { ContentModule } from "./modules/content/content.module";
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    LimitadorModule,
     HealthModule,
     InteractionsModule,
     RequestsModule,

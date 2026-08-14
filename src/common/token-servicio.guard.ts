@@ -8,6 +8,7 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { timingSafeEqual } from "node:crypto";
 import type { Request } from "express";
+import { ipDelCliente } from "./ip-cliente";
 
 /**
  * Protección provisional de los endpoints internos con un token compartido.
@@ -43,7 +44,7 @@ export class TokenServicioGuard implements CanActivate {
 
     if (!this.iguales(recibido, esperado)) {
       this.logger.warn(
-        `Acceso rechazado a ${peticion.method} ${peticion.path} desde ${peticion.ip}`,
+        `Acceso rechazado a ${peticion.method} ${peticion.path} desde ${ipDelCliente(peticion)}`,
       );
       throw new UnauthorizedException();
     }

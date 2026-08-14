@@ -14,6 +14,7 @@ import {
 import { SesionGuard, SoloSuperadmin, type PeticionConActor } from "../auth/sesion.guard";
 import { UsersService } from "./users.service";
 import { crearUsuarioSchema, estadoUsuarioSchema } from "./user.schema";
+import { ipDelCliente } from "../../common/ip-cliente";
 
 /**
  * Gestión de cuentas: reservada por completo al superadministrador. Un
@@ -34,7 +35,7 @@ export class UsersController {
   crear(@Body() cuerpo: unknown, @Req() peticion: PeticionConActor) {
     const validacion = crearUsuarioSchema.safeParse(cuerpo);
     if (!validacion.success) throw new BadRequestException(validacion.error.issues);
-    return this.service.crear(validacion.data, peticion.actor!, peticion.ip);
+    return this.service.crear(validacion.data, peticion.actor!, ipDelCliente(peticion));
   }
 
   @Post(":id/resend-link")
@@ -42,7 +43,7 @@ export class UsersController {
     @Param("id", ParseUUIDPipe) id: string,
     @Req() peticion: PeticionConActor,
   ) {
-    return this.service.reenviarEnlace(id, peticion.actor!, peticion.ip);
+    return this.service.reenviarEnlace(id, peticion.actor!, ipDelCliente(peticion));
   }
 
   /** Cierra sus sesiones y le manda un enlace para elegir contraseña nueva. */
@@ -51,7 +52,7 @@ export class UsersController {
     @Param("id", ParseUUIDPipe) id: string,
     @Req() peticion: PeticionConActor,
   ) {
-    return this.service.forzarCambio(id, peticion.actor!, peticion.ip);
+    return this.service.forzarCambio(id, peticion.actor!, ipDelCliente(peticion));
   }
 
   @Patch(":id/status")
@@ -68,7 +69,7 @@ export class UsersController {
         "No se puede suspender: dejaría al sistema sin superadministrador activo",
       );
     }
-    return this.service.cambiarEstado(id, validacion.data.status, peticion.actor!, peticion.ip);
+    return this.service.cambiarEstado(id, validacion.data.status, peticion.actor!, ipDelCliente(peticion));
   }
 
   @Delete(":id")
@@ -81,6 +82,6 @@ export class UsersController {
         "No se puede eliminar: dejaría al sistema sin superadministrador activo",
       );
     }
-    return this.service.eliminar(id, peticion.actor!, peticion.ip);
+    return this.service.eliminar(id, peticion.actor!, ipDelCliente(peticion));
   }
 }

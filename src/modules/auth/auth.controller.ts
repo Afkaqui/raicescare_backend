@@ -5,12 +5,14 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  HttpException,
   Post,
   Req,
   Res,
   UseGuards,
 } from "@nestjs/common";
 import type { Response } from "express";
+import { Limitador } from "../../common/limitador";
 import { AuthService } from "./auth.service";
 import { SesionGuard, type PeticionConActor } from "./sesion.guard";
 import {
@@ -18,12 +20,36 @@ import {
   entrarSchema,
   pedirRecuperacionSchema,
 } from "./auth.schema";
+import { ipDelCliente } from "../../common/ip-cliente";
 
 const COOKIE = "rc_sesion";
+const MINUTO = 60_000;
+
+/**
+ * Límites por origen. El bloqueo por cuenta ya frena el ataque contra una
+ * persona concreta, pero no impide probar una contraseña común contra muchas
+ * cuentas, ni sondear qué correos existen. Esto lo ataja.
+ */
+const LIMITE_LOGIN = 10;
+const LIMITE_RECUPERACION = 5;
+const LIMITE_CLAVE = 10;
 
 @Controller("auth")
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly limitador: Limitador,
+  ) {}
+
+  /** Mismo mensaje que un rechazo normal: no se delata que hubo límite. */
+  private exigirCupo(cubo: string, ip: string, limite: number) {
+    if (!this.limitador.permitido(cubo, ip, limite, MINUTO)) {
+      throw new HttpException(
+        "Demasiados intentos. Espera un minuto y vuelve a probar.",
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
 
   /** POST /api/v1/auth/login */
   @Post("login")
@@ -36,10 +62,13 @@ export class AuthController {
     const validacion = entrarSchema.safeParse(cuerpo);
     if (!validacion.success) throw new BadRequestException(validacion.error.issues);
 
+    const ip = ipDelCliente(peticion);
+    this.exigirCupo("login", ip, LIMITE_LOGIN);
+
     const sesion = await this.auth.entrar(
       validacion.data.email,
       validacion.data.password,
-      { ip: peticion.ip, ua: peticion.get("user-agent") },
+      { ip: ipDelCliente(peticion), ua: peticion.get("user-agent") },
     );
 
     // httpOnly: ni un script inyectado en la página puede leer la sesión.
@@ -54,6 +83,9 @@ export class AuthController {
       path: "/",
       expires: sesion.expiraEn,
     });
+
+    // Quien acertó deja de consumir cupo: el límite es contra quien prueba.
+    this.limitador.olvidar("login", ip);
 
     return { usuario: sesion.usuario, expiraEn: sesion.expiraEn };
   }
@@ -89,18 +121,26 @@ export class AuthController {
    */
   @Post("recovery")
   @HttpCode(HttpStatus.ACCEPTED)
-  pedirRecuperacion(@Body() cuerpo: unknown) {
+  pedirRecuperacion(@Body() cuerpo: unknown, @Req() peticion: PeticionConActor) {
     const validacion = pedirRecuperacionSchema.safeParse(cuerpo);
     if (!validacion.success) throw new BadRequestException(validacion.error.issues);
+
+    // Sin límite, esto sería un cañón de correos hacia cualquier buzón.
+    this.exigirCupo("recuperacion", ipDelCliente(peticion), LIMITE_RECUPERACION);
+
     return this.auth.pedirRecuperacion(validacion.data.email);
   }
 
   /** POST /api/v1/auth/password — consume el enlace y fija la contraseña. */
   @Post("password")
   @HttpCode(HttpStatus.OK)
-  definir(@Body() cuerpo: unknown) {
+  definir(@Body() cuerpo: unknown, @Req() peticion: PeticionConActor) {
     const validacion = definirContrasenaSchema.safeParse(cuerpo);
     if (!validacion.success) throw new BadRequestException(validacion.error.issues);
+
+    // Frena el probado de enlaces de un uso a fuerza de intentos.
+    this.exigirCupo("clave", ipDelCliente(peticion), LIMITE_CLAVE);
+
     return this.auth.definirContrasena(
       validacion.data.token,
       validacion.data.password,
