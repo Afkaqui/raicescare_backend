@@ -132,7 +132,7 @@ export class DonorsController {
         throw new HttpException(
           {
             message:
-              "Esa cuenta es del equipo de RaícesCare, no de aportante. Te llevamos a la plataforma interna.",
+              "Esa cuenta es del equipo de RaícesCare, no de aportante. Con esas mismas credenciales puedes entrar a la plataforma interna.",
             destino: "/admin/entrar",
           },
           HttpStatus.CONFLICT,
