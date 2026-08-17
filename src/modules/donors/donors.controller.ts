@@ -14,6 +14,7 @@ import {
 import type { Response } from "express";
 import { z } from "zod";
 import { Limitador } from "../../common/limitador";
+import { AuthService } from "../auth/auth.service";
 import { ipDelCliente } from "../../common/ip-cliente";
 import { DonorsService } from "./donors.service";
 import {
@@ -49,6 +50,7 @@ export class DonorsController {
   constructor(
     private readonly donantes: DonorsService,
     private readonly limitador: Limitador,
+    private readonly personal: AuthService,
   ) {}
 
   private exigirCupo(cubo: string, ip: string, limite: number) {
@@ -109,11 +111,35 @@ export class DonorsController {
     const ip = ipDelCliente(peticion);
     this.exigirCupo("login-aportante", ip, 10);
 
-    const sesion = await this.donantes.entrar(
-      validacion.data.email,
-      validacion.data.password,
-      { ip, ua: peticion.get("user-agent") },
-    );
+    let sesion;
+    try {
+      sesion = await this.donantes.entrar(
+        validacion.data.email,
+        validacion.data.password,
+        { ip, ua: peticion.get("user-agent") },
+      );
+    } catch (fallo) {
+      // Quien acertó la contraseña de una cuenta del equipo no se equivocó de
+      // credenciales, sino de puerta. Se le dice a dónde ir. Solo llega aquí
+      // quien ya conocía la clave, así que no revela quién tiene acceso.
+      if (
+        await this.personal.credencialesDePersonal(
+          validacion.data.email,
+          validacion.data.password,
+        )
+      ) {
+        this.limitador.olvidar("login-aportante", ip);
+        throw new HttpException(
+          {
+            message:
+              "Esa cuenta es del equipo de RaícesCare, no de aportante. Te llevamos a la plataforma interna.",
+            destino: "/admin/entrar",
+          },
+          HttpStatus.CONFLICT,
+        );
+      }
+      throw fallo;
+    }
 
     this.ponerCookie(respuesta, sesion.token, sesion.expiraEn);
     this.limitador.olvidar("login-aportante", ip);

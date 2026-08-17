@@ -147,6 +147,28 @@ export class AuthService {
     }
   }
 
+  /**
+   * Comprueba si unas credenciales son de una cuenta del personal, sin abrir
+   * sesión ni tocar nada.
+   *
+   * Existe solo para poder redirigir a quien se equivoca de puerta. Se
+   * consulta únicamente después de que la contraseña haya resultado correcta,
+   * así que no sirve para averiguar quién tiene acceso al back-office: quien
+   * pregunta ya conocía la clave.
+   */
+  async credencialesDePersonal(
+    email: string,
+    contrasena: string,
+  ): Promise<boolean> {
+    const usuario = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: { passwordHash: true, status: true },
+    });
+
+    if (!usuario || usuario.status !== "active") return false;
+    return verificarContrasena(contrasena, usuario.passwordHash);
+  }
+
   /** Resuelve el token de sesión a un actor, o null si no vale. */
   async actorDeToken(token: string): Promise<Actor | null> {
     const sesion = await this.prisma.session.findUnique({
