@@ -99,6 +99,29 @@ export class PaymentsController {
     return { recibido: true };
   }
 
+  /**
+   * POST /api/v1/payments/{trackingCode}/return — lo llama la pantalla de
+   * regreso. Público porque lo dispara el navegador del aportante, y limitado
+   * porque es escritura sin credencial. Solo anota; no cambia estados.
+   */
+  @Post(":trackingCode/return")
+  @HttpCode(HttpStatus.ACCEPTED)
+  retorno(
+    @Param("trackingCode") trackingCode: string,
+    @Body("resultado") resultado: string,
+    @Req() peticion: Request,
+  ) {
+    if (!this.limitador.permitido("retorno", ipDelCliente(peticion), 20, 60_000)) {
+      return { registrado: false };
+    }
+
+    const admitidos = ["success", "pending", "failure"];
+    return this.service.registrarRetorno(
+      trackingCode,
+      admitidos.includes(resultado) ? resultado : "desconocido",
+    );
+  }
+
   /** GET /api/v1/payments/{trackingCode} — estado para la pantalla de gracias. */
   @Get(":trackingCode")
   estado(@Param("trackingCode") trackingCode: string) {

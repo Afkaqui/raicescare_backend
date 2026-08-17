@@ -358,6 +358,40 @@ export class PaymentsService {
     return solicitud;
   }
 
+  /**
+   * Anota que alguien volvió de la pasarela y con qué resultado.
+   *
+   * MercadoPago no avisa de los intentos que no llegan a crear un pago: si
+   * rechaza a alguien antes de cobrarle, no hay notificación ni pago que
+   * consultar, y el expediente se queda en «recibido» sin que nadie sepa por
+   * qué. Este es el único rastro posible de esos casos.
+   *
+   * No cambia ningún estado: es lo que dice un navegador, no la pasarela.
+   * Sirve para que alguien pueda mirar y preguntar, no para dar nada por bueno.
+   */
+  async registrarRetorno(trackingCode: string, resultado: string) {
+    const solicitud = await this.prisma.institutionalRequest.findUnique({
+      where: { trackingCode },
+      select: { id: true },
+    });
+
+    if (!solicitud) return { registrado: false };
+
+    await this.prisma.paymentEvent.create({
+      data: {
+        eventType: "retorno",
+        resourceId: trackingCode,
+        signatureValid: false,
+        processed: true,
+        processingNote: `El aportante volvió de la pasarela con resultado «${resultado}»`,
+        payload: { resultado } as never,
+      },
+    });
+
+    this.logger.log(`Retorno de ${trackingCode}: ${resultado}`);
+    return { registrado: true };
+  }
+
   /** Estado de pago de un expediente, para la pantalla de gracias. */
   async estadoPublico(trackingCode: string) {
     const solicitud = await this.prisma.institutionalRequest.findUnique({

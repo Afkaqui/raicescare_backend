@@ -19,7 +19,12 @@ export class BackofficeService {
 
   /** Contadores para saber de un vistazo qué hay pendiente. */
   async resumen() {
-    const [porEstado, porTipo, sinAsignar] = await Promise.all([
+    // Un aporte que sigue «recibido» pasada media hora no se completó: o la
+    // pasarela lo rechazó o la persona se fue. En ambos casos alguien debería
+    // mirarlo, y hasta ahora no había forma de saber que existía.
+    const haceMediaHora = new Date(Date.now() - 30 * 60_000);
+
+    const [porEstado, porTipo, sinAsignar, aportesSinCompletar] = await Promise.all([
       this.prisma.institutionalRequest.groupBy({
         by: ["status"],
         _count: { _all: true },
@@ -31,6 +36,13 @@ export class BackofficeService {
       }),
       this.prisma.institutionalRequest.count({
         where: { status: { in: ESTADOS_ABIERTOS }, assignedOwnerId: null },
+      }),
+      this.prisma.institutionalRequest.count({
+        where: {
+          requestType: "contribution",
+          status: "received",
+          submittedAt: { lt: haceMediaHora },
+        },
       }),
     ]);
 
@@ -45,6 +57,7 @@ export class BackofficeService {
         .filter((fila) => ESTADOS_ABIERTOS.includes(fila.status))
         .reduce((suma, fila) => suma + fila._count._all, 0),
       sinAsignar,
+      aportesSinCompletar,
     };
   }
 
@@ -58,6 +71,10 @@ export class BackofficeService {
     if (consulta.type) donde.requestType = consulta.type;
     if (consulta.status === "abiertos") {
       donde.status = { in: ESTADOS_ABIERTOS };
+    } else if (consulta.status === "sin_completar") {
+      donde.requestType = "contribution";
+      donde.status = "received";
+      donde.submittedAt = { lt: new Date(Date.now() - 30 * 60_000) };
     } else if (consulta.status) {
       donde.status = consulta.status;
     }
