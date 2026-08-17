@@ -9,7 +9,6 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
-  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -31,11 +30,11 @@ export class RequestsController {
   ) {}
 
   /**
-   * Un aporte exige cuenta confirmada; los demás trámites, no.
+   * Devuelve la cuenta del aportante si hay sesión confirmada, o nada.
    *
-   * La diferencia es deliberada: pedirle cuenta a quien quiere ofrecer su
-   * tiempo o proponer una alianza levantaría una barrera sin contrapartida,
-   * mientras que en el aporte permite que la persona vuelva a ver su historial.
+   * Nunca bloquea: exigir registro antes de donar es la fricción que más
+   * donaciones pierde. La cuenta sirve para que la persona vuelva a ver lo que
+   * dio, no para dejarla fuera si no la quiere.
    */
   private async aportanteDe(peticion: Request): Promise<string | undefined> {
     const galleta = peticion.headers.cookie
@@ -61,13 +60,9 @@ export class RequestsController {
       throw new BadRequestException(validacion.error.issues);
     }
 
+    // Registrarse es opcional: quien tenga sesión ve el aporte en su historial,
+    // quien no, aporta igual y puede reclamarlo después con el mismo correo.
     const donorId = await this.aportanteDe(peticion);
-
-    if (validacion.data.requestType === "contribution" && !donorId) {
-      throw new UnauthorizedException(
-        "Para aportar necesitas una cuenta con el correo confirmado.",
-      );
-    }
 
     return this.service.crear(
       validacion.data,

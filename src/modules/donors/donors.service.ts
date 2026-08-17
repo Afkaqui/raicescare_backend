@@ -157,18 +157,51 @@ export class DonorsService {
       throw new UnauthorizedException("El enlace venció o ya se usó. Pide uno nuevo.");
     }
 
-    await this.prisma.$transaction([
-      this.prisma.donor.update({
+    const donante = await this.prisma.$transaction(async (tx) => {
+      const actualizado = await tx.donor.update({
         where: { id: registro.donorId },
         data: { emailVerifiedAt: new Date() },
-      }),
-      this.prisma.donorToken.update({
+      });
+      await tx.donorToken.update({
         where: { id: registro.id },
         data: { usedAt: new Date() },
-      }),
-    ]);
+      });
+      return actualizado;
+    });
 
-    return { verificado: true };
+    const reclamados = await this.reclamarAportesPrevios(donante.id, donante.email);
+    return { verificado: true, reclamados };
+  }
+
+  /**
+   * Enlaza a la cuenta los aportes que se hicieron como invitado con este mismo
+   * correo.
+   *
+   * Solo se hace después de confirmar el buzón: sin esa prueba, registrarse con
+   * el correo de otra persona bastaría para apropiarse de su historial. Y solo
+   * alcanza a los expedientes que no tienen dueño todavía.
+   */
+  private async reclamarAportesPrevios(donorId: string, email: string) {
+    const huerfanos = await this.prisma.institutionalRequest.findMany({
+      where: {
+        requestType: "contribution",
+        donorId: null,
+        persona: { email: { equals: email, mode: "insensitive" } },
+      },
+      select: { id: true },
+    });
+
+    if (huerfanos.length === 0) return 0;
+
+    await this.prisma.institutionalRequest.updateMany({
+      where: { id: { in: huerfanos.map((item) => item.id) } },
+      data: { donorId },
+    });
+
+    this.logger.log(
+      `${huerfanos.length} aporte(s) previo(s) enlazados a la cuenta recién confirmada`,
+    );
+    return huerfanos.length;
   }
 
   // --------------------------------------------------------------- sesión
