@@ -12,6 +12,7 @@ import { UsersModule } from "./modules/users/users.module";
 import { BackofficeModule } from "./modules/backoffice/backoffice.module";
 import { MediaModule } from "./modules/media/media.module";
 import { ContentModule } from "./modules/content/content.module";
+import { DonorsModule } from "./modules/donors/donors.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { ContentModule } from "./modules/content/content.module";
     BackofficeModule,
     MediaModule,
     ContentModule,
+    DonorsModule,
   ],
 })
 export class AppModule {}

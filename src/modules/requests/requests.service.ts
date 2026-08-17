@@ -30,7 +30,11 @@ export class RequestsService {
    * seguimiento se reserva con la secuencia, de modo que dos solicitudes
    * simultáneas nunca reciben el mismo número.
    */
-  async crear(datos: CrearSolicitudDto, huella?: { ip?: string; ua?: string }) {
+  async crear(
+    datos: CrearSolicitudDto,
+    huella?: { ip?: string; ua?: string },
+    donorId?: string,
+  ) {
     if (!this.prisma.disponible) {
       throw new ServiceUnavailableException("Base de datos no disponible");
     }
@@ -86,6 +90,7 @@ export class RequestsService {
           applicantOrganizationId: organizacion?.id,
           category: datos.category,
           source: datos.source,
+          donorId,
           formData: (datos.formData ?? undefined) as never,
           status: "received",
         },

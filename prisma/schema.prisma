@@ -137,6 +137,8 @@ model InstitutionalRequest {
   applicantOrganizationId String?  @map("applicant_organization_id") @db.Uuid
   category               String?   @db.VarChar(120)
   source                 String?   @db.VarChar(120)
+  /// Cuenta de aportante que originó el expediente, cuando la hay.
+  donorId                String?   @map("donor_id") @db.Uuid
   /// Respuestas específicas del proceso. La cabecera es común; el detalle de
   /// cada formulario maestro vive aquí hasta que amerite tabla propia.
   formData               Json?     @map("form_data")
@@ -147,6 +149,7 @@ model InstitutionalRequest {
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   closedAt               DateTime? @map("closed_at") @db.Timestamptz(6)
 
+  donante       Donor?                 @relation(fields: [donorId], references: [id])
   interaccion   CtaInteraction?        @relation(fields: [interactionId], references: [interactionId])
   persona       Person?                @relation(fields: [applicantPersonId], references: [id])
   organizacion  Organization?          @relation(fields: [applicantOrganizationId], references: [id])
@@ -162,6 +165,7 @@ model InstitutionalRequest {
   @@index([requestType])
   @@index([status])
   @@index([submittedAt])
+  @@index([donorId])
   @@map("institutional_requests")
 }
 
@@ -515,4 +519,74 @@ model MediaAsset {
   portadaDe ContentItem[] @relation("PortadaDeContenido")
 
   @@map("media_assets")
+}
+
+// ----------------------------------------------------------------- aportantes
+
+/// Cuenta de quien aporta.
+///
+/// Deliberadamente separada de `User`: son poblaciones con reglas opuestas. Un
+/// aportante se registra solo y recupera su clave solo; al personal lo da de
+/// alta el superadministrador y nadie más. Mezclarlas en una tabla dejaría que
+/// un error en un solo campo de rol acercara a un aportante al back-office;
+/// separadas, eso es imposible por estructura.
+model Donor {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique @db.VarChar(180)
+  fullName     String    @map("full_name") @db.VarChar(180)
+  passwordHash String?   @map("password_hash")
+  phone        String?   @db.VarChar(40)
+  country      String?   @db.VarChar(100)
+  /// Sin verificar no se puede aportar: si no, cualquiera reclamaría el
+  /// historial de otro registrándose con su correo.
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  status       String    @default("active") @db.VarChar(20)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  failedLogins Int       @default(0) @map("failed_logins")
+  lockedUntil  DateTime? @map("locked_until") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sesiones    DonorSession[]
+  tokens      DonorToken[]
+  expedientes InstitutionalRequest[]
+
+  @@index([status])
+  @@map("donors")
+}
+
+/// Sesión de aportante. Tabla propia: ninguna guarda del back-office puede
+/// resolverla, así que una de estas nunca abrirá una puerta del personal.
+model DonorSession {
+  id         String    @id @default(uuid()) @db.Uuid
+  donorId    String    @map("donor_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash") @db.Char(64)
+  ipHash     String?   @map("ip_hash")
+  userAgent  String?   @map("user_agent") @db.VarChar(300)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  donante Donor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@index([donorId])
+  @@index([expiresAt])
+  @@map("donor_sessions")
+}
+
+/// Enlace de un uso: `verification` al registrarse, `recovery` al olvidar.
+model DonorToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  donorId   String    @map("donor_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  purpose   String    @db.VarChar(20)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  donante Donor @relation(fields: [donorId], references: [id], onDelete: Cascade)
+
+  @@index([donorId])
+  @@map("donor_tokens")
 }

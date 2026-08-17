@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
 import {
@@ -18,25 +19,61 @@ import {
 import type { Request } from "express";
 import { RequestsService } from "./requests.service";
 import { crearSolicitudSchema, transicionSchema } from "./request.schema";
+import { DonorsService } from "../donors/donors.service";
+import { COOKIE_APORTANTE } from "../donors/aportante.guard";
 import { ipDelCliente } from "../../common/ip-cliente";
 
 @Controller("requests")
 export class RequestsController {
-  constructor(private readonly service: RequestsService) {}
+  constructor(
+    private readonly service: RequestsService,
+    private readonly donantes: DonorsService,
+  ) {}
+
+  /**
+   * Un aporte exige cuenta confirmada; los demás trámites, no.
+   *
+   * La diferencia es deliberada: pedirle cuenta a quien quiere ofrecer su
+   * tiempo o proponer una alianza levantaría una barrera sin contrapartida,
+   * mientras que en el aporte permite que la persona vuelva a ver su historial.
+   */
+  private async aportanteDe(peticion: Request): Promise<string | undefined> {
+    const galleta = peticion.headers.cookie
+      ?.split(";")
+      .map((trozo) => trozo.trim().split("="))
+      .find(([nombre]) => nombre === COOKIE_APORTANTE);
+
+    if (!galleta) return undefined;
+
+    const aportante = await this.donantes.aportanteDeToken(
+      decodeURIComponent(galleta.slice(1).join("=")),
+    );
+
+    return aportante?.verificado ? aportante.id : undefined;
+  }
 
   /** POST /api/v1/requests — abre el expediente y devuelve el código. */
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  crear(@Body() cuerpo: unknown, @Req() peticion: Request) {
+  async crear(@Body() cuerpo: unknown, @Req() peticion: Request) {
     const validacion = crearSolicitudSchema.safeParse(cuerpo);
     if (!validacion.success) {
       throw new BadRequestException(validacion.error.issues);
     }
 
-    return this.service.crear(validacion.data, {
-      ip: ipDelCliente(peticion),
-      ua: peticion.get("user-agent"),
-    });
+    const donorId = await this.aportanteDe(peticion);
+
+    if (validacion.data.requestType === "contribution" && !donorId) {
+      throw new UnauthorizedException(
+        "Para aportar necesitas una cuenta con el correo confirmado.",
+      );
+    }
+
+    return this.service.crear(
+      validacion.data,
+      { ip: ipDelCliente(peticion), ua: peticion.get("user-agent") },
+      donorId,
+    );
   }
 
   /** GET /api/v1/requests/{trackingCode} — seguimiento público. */
