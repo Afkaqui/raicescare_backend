@@ -16,6 +16,8 @@ VPS_HOST="${VPS_HOST:-161.132.54.226}"
 APP_DIR="${APP_DIR:-~/raicescare_backend}"
 CONTENEDOR="raicescare_api"
 PUERTO="${API_HOST_PORT:-8221}"
+# La API escucha solo en la puerta de enlace de Docker, no en 0.0.0.0.
+BIND_IP="${API_BIND_IP:-10.200.0.1}"
 RAMA="main"
 
 azul()  { printf '\033[1;34m%s\033[0m\n' "$1"; }
@@ -88,7 +90,9 @@ docker compose exec -T ${CONTENEDOR} npx tsx prisma/seed.ts 2>&1 | tail -2
 
 echo "  -- verificar"
 docker ps --filter name=${CONTENEDOR} --format "     contenedor: up {{.RunningFor}}"
-curl -sf http://localhost:${PUERTO}/api/v1/health >/dev/null && echo "     health local OK"
+# Desde el host, la API ya no escucha en localhost sino en la puerta de enlace
+# de Docker; si esto falla, el contenedor no logró enlazar esa dirección.
+curl -sf http://${BIND_IP}:${PUERTO}/api/v1/health >/dev/null && echo "     health local OK"
 REMOTO
 
 # ------------------------------------------------------------ 4. verificar

@@ -8,7 +8,12 @@ services:
     container_name: raicescare_api
     restart: always
     ports:
-      - "${API_HOST_PORT:-8221}:3001"
+      # Solo en la puerta de enlace de Docker, que es por donde llega
+      # nginx_proxy (host.docker.internal resuelve ahí dentro). Publicarlo en
+      # 0.0.0.0 dejaba la API accesible desde internet sin cifrar y saltándose
+      # Cloudflare, incluidos los límites por origen: quien entra por ahí puede
+      # falsificar la cabecera de IP y probar contraseñas sin freno.
+      - "${API_BIND_IP:-10.200.0.1}:${API_HOST_PORT:-8221}:3001"
     environment:
       - NODE_ENV=production
       - PORT=3001
