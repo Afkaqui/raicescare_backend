@@ -481,6 +481,10 @@ model ContentItem {
   /// Meta de recaudación, cuando la campaña la tenga.
   goalAmount  Decimal?  @map("goal_amount") @db.Decimal(12, 2)
   goalCurrency String?  @map("goal_currency") @db.VarChar(3)
+  /// Recaudado fuera de la pasarela (transferencia, Yape directo, en especie).
+  /// Se carga a mano desde el panel y se suma al avance público.
+  offlineAmount       Decimal? @map("offline_amount") @db.Decimal(12, 2)
+  offlineContributors Int?     @map("offline_contributors")
   coverMediaId String?  @map("cover_media_id") @db.Uuid
 
   /// `draft` o `published`. Despublicar es reversible; eliminar no.

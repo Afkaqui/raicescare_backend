@@ -8,6 +8,16 @@ import { PrismaService } from "../../prisma/prisma.service";
 import { AuthService, type Actor } from "../auth/auth.service";
 import type { ContenidoDto } from "./content.schema";
 
+/**
+ * Tipo de cambio para sumar en una sola cifra aportes en soles y en dólares.
+ * Es referencial, no contable: el mismo con que se armó el presupuesto de las
+ * campañas. La rendición de cuentas usa los montos reales de cada pago.
+ */
+const SOLES_POR_DOLAR = 3.6;
+
+/** Valor de `destino` con que el formulario de aportes marca una campaña. */
+export const destinoDeCampana = (slug: string) => `campana:${slug}`;
+
 const CON_PORTADA = {
   portada: {
     select: {
@@ -54,6 +64,59 @@ export class ContentService {
     }
 
     return this.vistaPublica(item);
+  }
+
+  /**
+   * Avance público de una campaña: lo acreditado por la pasarela más lo que se
+   * registró a mano. Se calcula en cada consulta en vez de guardarse, para que
+   * no exista una cifra que alguien olvide actualizar.
+   */
+  async avance(slug: string) {
+    const campana = await this.prisma.contentItem.findUnique({
+      where: { kind_slug: { kind: "campaign", slug } },
+    });
+    if (!campana || campana.status !== "published") {
+      throw new NotFoundException("Campaña no encontrada");
+    }
+
+    const moneda = campana.goalCurrency ?? "PEN";
+    const pagos = await this.prisma.payment.findMany({
+      where: {
+        status: "approved",
+        solicitud: {
+          requestType: "contribution",
+          formData: { path: ["destino"], equals: destinoDeCampana(slug) },
+        },
+      },
+      select: { amount: true, currency: true, requestId: true },
+    });
+
+    const enMonedaDeLaMeta = (monto: number, de: string) =>
+      de === moneda ? monto : de === "USD" ? monto * SOLES_POR_DOLAR : monto / SOLES_POR_DOLAR;
+
+    const enLinea = pagos.reduce(
+      (suma, pago) => suma + enMonedaDeLaMeta(Number(pago.amount), pago.currency),
+      0,
+    );
+    // Un expediente es un aporte, aunque la pasarela haya registrado más de un
+    // intento: se cuentan expedientes, no pagos.
+    const aportesEnLinea = new Set(pagos.map((pago) => pago.requestId)).size;
+
+    const fueraDeLinea = Number(campana.offlineAmount ?? 0);
+    const aportesFueraDeLinea = campana.offlineContributors ?? 0;
+
+    return {
+      slug,
+      meta: campana.goalAmount ? Number(campana.goalAmount) : null,
+      moneda,
+      recaudado: Math.round((enLinea + fueraDeLinea) * 100) / 100,
+      aportantes: aportesEnLinea + aportesFueraDeLinea,
+      cierre: campana.endsOn,
+      detalle: {
+        enLinea: { monto: Math.round(enLinea * 100) / 100, aportes: aportesEnLinea },
+        fueraDeLinea: { monto: fueraDeLinea, aportes: aportesFueraDeLinea },
+      },
+    };
   }
 
   /** Listado del panel: incluye borradores. */
@@ -162,6 +225,9 @@ export class ContentService {
       endsOn: datos.endsOn ? new Date(datos.endsOn) : null,
       goalAmount: datos.goalAmount ? new Prisma.Decimal(datos.goalAmount) : null,
       goalCurrency: datos.goalAmount ? (datos.goalCurrency ?? "PEN") : null,
+      offlineAmount:
+        datos.offlineAmount !== undefined ? new Prisma.Decimal(datos.offlineAmount) : null,
+      offlineContributors: datos.offlineContributors ?? null,
       coverMediaId: datos.coverMediaId,
       status: datos.status,
     };

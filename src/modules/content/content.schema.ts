@@ -24,6 +24,9 @@ export const contenidoSchema = z.object({
   endsOn: z.string().date().optional(),
   goalAmount: z.number().positive().max(10_000_000).optional(),
   goalCurrency: z.enum(["PEN", "USD"]).optional(),
+  // Lo recaudado fuera de la pasarela, en la moneda de la meta.
+  offlineAmount: z.number().min(0).max(10_000_000).optional(),
+  offlineContributors: z.number().int().min(0).max(100_000).optional(),
   coverMediaId: z.string().uuid().optional(),
   status: z.enum(["draft", "published"]).default("draft"),
 }).refine(

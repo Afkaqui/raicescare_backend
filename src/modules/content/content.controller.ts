@@ -34,6 +34,12 @@ export class ContentPublicoController {
     return this.service.publicos(kind, program);
   }
 
+  /** GET /api/v1/content/campaign/{slug}/progress — barra de avance. */
+  @Get("campaign/:slug/progress")
+  avance(@Param("slug") slug: string) {
+    return this.service.avance(slug);
+  }
+
   @Get(":kind/:slug")
   detalle(@Param("kind") kind: string, @Param("slug") slug: string) {
     if (!TIPOS_CONTENIDO.includes(kind as never)) {
