@@ -24,7 +24,7 @@ export class BackofficeService {
     // mirarlo, y hasta ahora no había forma de saber que existía.
     const haceMediaHora = new Date(Date.now() - 30 * 60_000);
 
-    const [porEstado, porTipo, sinAsignar, aportesSinCompletar] = await Promise.all([
+    const [porEstado, porTipo, sinAsignar, aportesSinCompletar, acreditados] = await Promise.all([
       this.prisma.institutionalRequest.groupBy({
         by: ["status"],
         _count: { _all: true },
@@ -44,6 +44,15 @@ export class BackofficeService {
           submittedAt: { lt: haceMediaHora },
         },
       }),
+      // Un aporte acreditado cierra su expediente y sale de «sin resolver»,
+      // que es la vista por defecto. Sin este contador, el dinero que sí
+      // llegó no se veía en ninguna parte de la portada.
+      this.prisma.payment.groupBy({
+        by: ["currency"],
+        where: { status: "approved" },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
     ]);
 
     return {
@@ -58,6 +67,14 @@ export class BackofficeService {
         .reduce((suma, fila) => suma + fila._count._all, 0),
       sinAsignar,
       aportesSinCompletar,
+      aportesAcreditados: {
+        cantidad: acreditados.reduce((suma, fila) => suma + fila._count._all, 0),
+        // Por moneda: soles y dólares no se suman entre sí.
+        importes: acreditados.map((fila) => ({
+          moneda: fila.currency,
+          total: (fila._sum.amount ?? new Prisma.Decimal(0)).toFixed(2),
+        })),
+      },
     };
   }
 
@@ -75,6 +92,9 @@ export class BackofficeService {
       donde.requestType = "contribution";
       donde.status = "received";
       donde.submittedAt = { lt: new Date(Date.now() - 30 * 60_000) };
+    } else if (consulta.status === "acreditados") {
+      donde.requestType = "contribution";
+      donde.pagos = { some: { status: "approved" } };
     } else if (consulta.status) {
       donde.status = consulta.status;
     }
