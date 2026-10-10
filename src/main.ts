@@ -24,7 +24,7 @@ async function bootstrap() {
   // credenciales, el comodín no es válido.
   app.enableCors({
     origin: origenes.length > 0 ? origenes : true,
-    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     credentials: true,
   });
 
