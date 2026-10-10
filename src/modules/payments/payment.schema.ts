@@ -11,6 +11,30 @@ export const MONEDAS = ["PEN", "USD"] as const;
 export const MONTO_MINIMO = 5;
 export const MONTO_MAXIMO = 50_000;
 
+/**
+ * El tope de MercadoPago para tarjetas es de S/ 50 000 por pago. En dólares el
+ * mismo número equivale a unas cuatro veces más y la pasarela lo rechazaría, así
+ * que se fija un tope propio con margen frente al tipo de cambio.
+ */
+const MAXIMO_POR_MONEDA: Record<(typeof MONEDAS)[number], number> = {
+  PEN: MONTO_MAXIMO,
+  USD: 13_000,
+};
+
+function dentroDelTope(
+  datos: { amount: number; currency: (typeof MONEDAS)[number] },
+  contexto: z.RefinementCtx,
+) {
+  const maximo = MAXIMO_POR_MONEDA[datos.currency];
+  if (datos.amount > maximo) {
+    contexto.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["amount"],
+      message: `El aporte máximo por operación en ${datos.currency} es ${maximo.toLocaleString("es-PE")}`,
+    });
+  }
+}
+
 const montoValido = z
   .number()
   .positive()
@@ -31,7 +55,7 @@ export const checkoutSchema = z.object({
   amount: montoValido,
   currency: z.enum(MONEDAS).default("PEN"),
   email: z.string().email().max(180).optional(),
-});
+}).superRefine(dentroDelTope);
 
 /** Aporte recurrente vía preapproval. */
 export const suscripcionSchema = z.object({
@@ -43,7 +67,7 @@ export const suscripcionSchema = z.object({
   frequencyType: z.enum(["months", "days"]).default("months"),
   // Obligatorio: sin correo no hay a quién cobrarle mes a mes.
   email: z.string().email().max(180),
-});
+}).superRefine(dentroDelTope);
 
 export type CheckoutDto = z.infer<typeof checkoutSchema>;
 export type SuscripcionDto = z.infer<typeof suscripcionSchema>;
